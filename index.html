@@ -196,14 +196,19 @@
                 mediaRecorder.onstop = async () => {
                     stopMediaTracks();
                     
-                    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                    // Convert to proper audio format
+                const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                console.log('Audio blob created:', {
+                    size: audioBlob.size,
+                    type: audioBlob.type
+                });
                     showLoading();
 
                     const formData = new FormData();
                     formData.append('file', audioBlob, 'recording.wav');
 
                     try {
-                        const response = await fetch(`${BACKEND_URL}/transcribe_and_reply/`, {
+                        const response = await fetch(`${BACKEND_URL.replace(/\/$/, '')}/transcribe_and_reply/`, {
                             method: 'POST',
                             body: formData,
                         });
@@ -228,7 +233,11 @@
                         }
                     } catch (error) {
                         console.error('Error:', error);
-                        showError('Unable to connect to the server. Please try again.');
+                        if (error instanceof TypeError && error.message === 'Failed to fetch') {
+                            showError('Network error: Unable to connect to the server. Please check your connection and try again.');
+                        } else {
+                            showError(`Error: ${error.message || 'Unable to connect to the server. Please try again.'}`);
+                        }
                     }
                 };
             } catch (error) {
