@@ -5,111 +5,150 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>UltraVox Interaction</title>
     <style>
+        :root {
+            --primary-color: #007BFF;
+            --primary-hover: #0056b3;
+            --error-color: #dc3545;
+            --success-color: #28a745;
+            --background-color: #f5f5f5;
+            --container-background: white;
+            --text-color: #333;
+            --border-color: #dee2e6;
+        }
+
         body {
-            font-family: Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
             margin: 0;
             padding: 20px;
-            background-color: #f5f5f5;
+            background-color: var(--background-color);
+            line-height: 1.6;
         }
+
         .container {
             max-width: 800px;
             margin: auto;
-            background-color: white;
+            background-color: var(--container-background);
             padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
         }
+
         h1 {
-            color: #333;
+            color: var(--text-color);
             text-align: center;
             margin-bottom: 30px;
+            font-weight: 600;
         }
+
         .button-container {
             display: flex;
             justify-content: center;
             gap: 20px;
             margin-bottom: 20px;
         }
+
         button {
             padding: 12px 24px;
             font-size: 16px;
-            background-color: #007BFF;
+            background-color: var(--primary-color);
             color: white;
             border: none;
-            border-radius: 5px;
+            border-radius: 6px;
             cursor: pointer;
-            transition: background-color 0.3s ease;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
+
         button:hover {
-            background-color: #0056b3;
+            background-color: var(--primary-hover);
+            transform: translateY(-1px);
         }
+
         button:disabled {
             background-color: #cccccc;
             cursor: not-allowed;
+            transform: none;
         }
+
         .status-container {
             text-align: center;
             margin: 20px 0;
+            min-height: 40px;
         }
+
         .recording-indicator {
-            color: #dc3545;
+            color: var(--error-color);
             font-weight: bold;
             display: none;
             align-items: center;
             justify-content: center;
             gap: 10px;
         }
+
         .spinner {
             display: inline-block;
             width: 20px;
             height: 20px;
-            border: 3px solid rgba(220, 53, 69, 0.3);
+            border: 3px solid rgba(0, 0, 0, 0.1);
             border-radius: 50%;
-            border-top-color: #dc3545;
+            border-top-color: currentColor;
             animation: spin 1s infinite linear;
         }
+
         @keyframes spin {
-            to {
-                transform: rotate(360deg);
-            }
+            to { transform: rotate(360deg); }
         }
+
         .audio-container {
             margin: 20px 0;
             text-align: center;
         }
+
         audio {
             width: 100%;
             max-width: 500px;
+            margin-top: 20px;
         }
-        .response {
+
+        .message {
             margin-top: 20px;
             padding: 15px;
-            border: 1px solid #dee2e6;
-            border-radius: 5px;
-            background-color: #f8f9fa;
+            border-radius: 6px;
+            font-size: 14px;
         }
+
         .error-message {
-            color: #dc3545;
-            background-color: #f8d7da;
-            border: 1px solid #f5c6cb;
-            padding: 10px;
-            border-radius: 5px;
-            margin-top: 10px;
+            color: var(--error-color);
+            background-color: #fff5f5;
+            border: 1px solid #feb2b2;
         }
+
         .success-message {
-            color: #28a745;
-            background-color: #d4edda;
-            border: 1px solid #c3e6cb;
-            padding: 10px;
-            border-radius: 5px;
-            margin-top: 10px;
+            color: var(--success-color);
+            background-color: #f0fff4;
+            border: 1px solid #9ae6b4;
+        }
+
+        .info-message {
+            color: var(--primary-color);
+            background-color: #ebf8ff;
+            border: 1px solid #90cdf4;
+        }
+
+        .timer {
+            font-size: 1.2em;
+            font-weight: 500;
+            color: var(--primary-color);
+            margin: 10px 0;
         }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>UltraVox Interaction</h1>
-        <p style="text-align: center;">Record your message and get an audio response!</p>
+        <p style="text-align: center;">Record your message and get an AI-generated audio response!</p>
         
         <div class="button-container">
             <button id="start-recording">Start Recording</button>
@@ -117,6 +156,7 @@
         </div>
 
         <div class="status-container">
+            <div id="timer" class="timer" style="display: none">00:00</div>
             <div class="recording-indicator" id="recording-indicator">
                 Recording in progress <div class="spinner"></div>
             </div>
@@ -126,45 +166,51 @@
             <audio id="response-audio" controls style="display:none;"></audio>
         </div>
 
-        <div class="response" id="response"></div>
+        <div id="message-container"></div>
     </div>
 
     <script>
-        // Replace with your Koyeb backend URL
         const BACKEND_URL = 'https://protective-joanie-altramanera-38d5f746.koyeb.app';
+        const MAX_RECORDING_TIME = 60; // Maximum recording time in seconds
         
         let mediaRecorder;
         let audioChunks = [];
         let stream;
+        let recordingTimer;
+        let recordingStartTime;
 
         const startButton = document.getElementById('start-recording');
         const stopButton = document.getElementById('stop-recording');
-        const responseDiv = document.getElementById('response');
         const responseAudio = document.getElementById('response-audio');
         const recordingIndicator = document.getElementById('recording-indicator');
+        const timerElement = document.getElementById('timer');
+        const messageContainer = document.getElementById('message-container');
 
-        function showError(message) {
-            responseDiv.innerHTML = `<div class="error-message">${message}</div>`;
+        function showMessage(message, type = 'info') {
+            messageContainer.innerHTML = `
+                <div class="message ${type}-message">
+                    ${message}
+                </div>
+            `;
         }
 
-        function showSuccess(message) {
-            responseDiv.innerHTML = `<div class="success-message">${message}</div>`;
-        }
-
-        function showLoading() {
-            responseDiv.innerHTML = '<div class="spinner"></div> Processing your request...';
-        }
-
-        async function stopMediaTracks() {
-            if (stream) {
-                stream.getTracks().forEach(track => track.stop());
+        function updateTimer() {
+            const elapsed = Math.floor((Date.now() - recordingStartTime) / 1000);
+            const remaining = MAX_RECORDING_TIME - elapsed;
+            
+            if (remaining <= 0) {
+                stopRecording();
+                return;
             }
+
+            const minutes = Math.floor(remaining / 60);
+            const seconds = remaining % 60;
+            timerElement.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
         }
 
-        // Start recording
-        startButton.addEventListener('click', async () => {
+        async function startRecording() {
             try {
-                responseDiv.innerHTML = '';
+                messageContainer.innerHTML = '';
                 responseAudio.style.display = 'none';
                 audioChunks = [];
 
@@ -179,76 +225,91 @@
                 startButton.disabled = true;
                 stopButton.disabled = false;
                 recordingIndicator.style.display = 'flex';
+                
+                // Start timer
+                recordingStartTime = Date.now();
+                timerElement.style.display = 'block';
+                recordingTimer = setInterval(updateTimer, 1000);
+                
+                showMessage('Recording started... Speak now!', 'info');
             } catch (error) {
                 console.error('Error accessing microphone:', error);
-                showError('Unable to access microphone. Please ensure microphone permissions are granted.');
+                showMessage('Unable to access microphone. Please ensure microphone permissions are granted.', 'error');
             }
-        });
+        }
 
-        // Stop recording
-        stopButton.addEventListener('click', async () => {
+        async function stopRecording() {
             try {
+                clearInterval(recordingTimer);
+                timerElement.style.display = 'none';
+                
                 stopButton.disabled = true;
-                startButton.disabled = false;
                 recordingIndicator.style.display = 'none';
-
+                
                 mediaRecorder.stop();
                 mediaRecorder.onstop = async () => {
-                    stopMediaTracks();
+                    if (stream) {
+                        stream.getTracks().forEach(track => track.stop());
+                    }
                     
-                    // Convert to proper audio format
-                const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-                console.log('Audio blob created:', {
-                    size: audioBlob.size,
-                    type: audioBlob.type
-                });
-                    showLoading();
+                    showMessage('Processing your recording...', 'info');
+
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                    console.log('Audio blob created:', {
+                        size: audioBlob.size,
+                        type: audioBlob.type
+                    });
 
                     const formData = new FormData();
                     formData.append('file', audioBlob, 'recording.wav');
 
                     try {
-                        const response = await fetch(`${BACKEND_URL.replace(/\/$/, '')}/transcribe_and_reply/`, {
+                        const response = await fetch(`${BACKEND_URL}/transcribe_and_reply/`, {
                             method: 'POST',
-                            body: formData,
+                            body: formData
                         });
 
-                        if (response.ok) {
-                            const blob = await response.blob();
-                            const audioURL = URL.createObjectURL(blob);
-                            responseAudio.src = audioURL;
-                            responseAudio.style.display = 'block';
-                            
-                            // Clean up the old audio URL
-                            responseAudio.onloadedmetadata = () => {
-                                showSuccess('Response received! Playing audio...');
-                                responseAudio.play().catch(e => {
-                                    console.error('Auto-play failed:', e);
-                                    showSuccess('Response received! Click play to listen.');
-                                });
-                            };
-                        } else {
+                        if (!response.ok) {
                             const errorData = await response.json();
-                            showError(`Server error: ${errorData.error || response.statusText}`);
+                            throw new Error(errorData.error || `Server error: ${response.status}`);
                         }
+
+                        const blob = await response.blob();
+                        const audioURL = URL.createObjectURL(blob);
+                        responseAudio.src = audioURL;
+                        responseAudio.style.display = 'block';
+                        
+                        showMessage('Response received! Click play to listen.', 'success');
+                        
+                        // Clean up old audio URL when loading new one
+                        responseAudio.onloadedmetadata = () => {
+                            responseAudio.play().catch(e => {
+                                console.error('Auto-play failed:', e);
+                            });
+                        };
                     } catch (error) {
                         console.error('Error:', error);
-                        if (error instanceof TypeError && error.message === 'Failed to fetch') {
-                            showError('Network error: Unable to connect to the server. Please check your connection and try again.');
-                        } else {
-                            showError(`Error: ${error.message || 'Unable to connect to the server. Please try again.'}`);
-                        }
+                        showMessage(`Error: ${error.message}`, 'error');
                     }
+                    
+                    startButton.disabled = false;
                 };
             } catch (error) {
                 console.error('Error stopping recording:', error);
-                showError('Error stopping recording. Please refresh the page and try again.');
+                showMessage('Error stopping recording. Please refresh and try again.', 'error');
+                startButton.disabled = false;
             }
-        });
+        }
+
+        // Event Listeners
+        startButton.addEventListener('click', startRecording);
+        stopButton.addEventListener('click', stopRecording);
 
         // Cleanup on page unload
         window.addEventListener('beforeunload', () => {
-            stopMediaTracks();
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
         });
     </script>
 </body>
